@@ -197,6 +197,43 @@ The `living-context` skill's `status` action shows the effective config
    judged not worth logging, `claude` not found, a timeout, etc.) —
    nothing here should be silent-and-mysterious.
 
+## Running tests
+
+```bash
+pip install -r requirements-dev.txt
+python3 -m pytest
+```
+
+The suite covers the mechanical, LLM-free logic in `lib/` directly (entry
+parsing, archiving math, the warning banner), the hook's fast in-process
+commit-filtering logic, and `hooks/run_context_update.py`'s orchestration
+(diff gathering, config plumbing, archiving/warning passes, auto-commit,
+error handling) against real scratch git repos with a fake `claude`
+executable standing in for the real `claude -p` call. It does not attempt
+to test the actual LLM drafting behavior — that's inherently not something
+a unit test can assert on; verify it manually per "Verifying it's working"
+above.
+
+A couple of genuine behavior gaps surfaced while writing these tests, and
+are captured as tests documenting current behavior rather than silently
+"fixed" (see their docstrings/comments for detail, in `tests/test_run_context_update.py`
+and `tests/test_hook_filter.py`):
+
+- `auto_commit` only stages/commits files that the archiving or warning
+  passes report as touched — an ordinary commit that appends an entry
+  without pushing a doc across the warn/threshold lines is never
+  auto-committed, despite the README describing `auto_commit` as
+  committing "its own doc/archive changes" generally.
+- When only the warning pass (not archiving) touches a doc, `archive_dir`
+  hasn't been created on disk yet, but the auto-commit `git add` call
+  includes it unconditionally — the `git add` fails on that nonexistent
+  pathspec and the whole commit attempt is aborted.
+- `GIT_COMMIT_RE` (the fast filter that decides whether a `Bash` call gets
+  treated as `git commit`) has two minor sharp edges: a command that
+  merely *starts with* `git commit-<suffix>` (not a real `commit`
+  invocation) is a false positive, and leading whitespace before `git`
+  causes a false negative.
+
 ## How the pieces fit together
 
 ```
