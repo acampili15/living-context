@@ -1,6 +1,6 @@
 ---
 name: living-context
-description: Manual controls for this repo's living-context setup (the auto-updating CONTEXT.md that the living-context plugin's commit hook maintains). Use this whenever the user asks about the context doc's status or size, wants to see what the auto-update hook has changed recently, wants to condense/summarize old entries or archive files, or wants to adjust living-context's configuration (doc path, archive threshold, auto-commit). Trigger on phrases like "check the context doc", "is CONTEXT.md getting too big", "condense the old context entries", "what has living-context logged recently", "show me the context doc diff", or "/living-context" followed by status/diff/condense/configure. Also trigger if the user seems confused about entries appearing in CONTEXT.md they didn't write themselves -- that's this plugin's hook, and `status` explains what's going on.
+description: Manual controls for this repo's living-context setup (the auto-updating CONTEXT.md that the living-context plugin's commit hook maintains). Use this whenever the user asks about the context doc's status or size, wants to see what the auto-update hook has changed recently, wants to condense/summarize old entries or archive files, wants a topic-organized reference doc built from the chronological log (not just a changelog), or wants to adjust living-context's configuration (doc path, archive threshold, auto-commit). Trigger on phrases like "check the context doc", "is CONTEXT.md getting too big", "condense the old context entries", "turn the context log into a proper doc", "build/update a project overview from the log", "what has living-context logged recently", "show me the context doc diff", or "/living-context" followed by status/diff/condense/synthesize/configure. Also trigger if the user seems confused about entries appearing in CONTEXT.md they didn't write themselves -- that's this plugin's hook, and `status` explains what's going on.
 ---
 
 # living-context: manual controls
@@ -15,11 +15,21 @@ The hook is deliberately restricted to two kinds of automatic writes:
 appending a new entry, and moving old entries verbatim into an archive
 file. It never rewrites or reworks existing text, because that kind of
 judgment call needs a human in the loop. This skill is where that judgment
-call happens -- specifically in `condense` below. Keep that split in mind:
-if the user wants something *reworded* or *shortened*, that's this skill,
-manually, with review before anything is committed. If they just want to
-know what state things are in, that's `status` or `diff` -- no writes at
-all.
+call happens -- in `condense` and `synthesize` below. Keep that split in
+mind: if the user wants something *reworded*, *shortened*, or
+*reorganized*, that's this skill, manually, with review before anything is
+written. If they just want to know what state things are in, that's
+`status` or `diff` -- no writes at all.
+
+`condense` and `synthesize` are easy to conflate but do different things.
+`condense` shortens the log *as a log* -- fewer, denser dated entries,
+still chronological. `synthesize` doesn't shorten anything in place; it
+reads the log and produces a separate, topic-organized reference doc (what
+this project is, how it works, key decisions and why) -- the kind of thing
+someone would want to read first, rather than scrolling a changelog. If
+the user's request sounds like "make the log shorter," that's `condense`;
+if it sounds like "turn this into a real doc" or "give me an overview,"
+that's `synthesize`.
 
 There's no single fixed way this skill gets invoked -- infer which action
 the user wants from their request (see the trigger phrases in the
@@ -107,6 +117,46 @@ Never run this automatically or as a side effect of another action -- it
 only happens when the user has actually asked for something to be
 condensed.
 
+## `synthesize`
+
+Turns the chronological log into a separate, topic-organized reference
+doc -- written to `synthesized_doc_path` (from `status`'s config output,
+default `PROJECT.md`). Think of the shape a good project's own `CLAUDE.md`
+or `README.md` takes: what this is, how it's structured, key decisions and
+why, organized by subject -- not "on this date we did this." A good model
+for the *kind* of document to produce, if the repo has one, is its own
+CLAUDE.md-style file: topic sections for durable facts about the project,
+distinct from a chronological history.
+
+Steps:
+
+1. Read the main doc (`doc_path`) and every sub-doc under `sub_doc_dir` in
+   full. Archived entries (`archive_dir`) are older and lower-signal by
+   definition -- skim them for anything that still matters (an important
+   reversal, a still-relevant constraint) rather than reading every one in
+   full, unless the user specifically asks for full history.
+2. **If `synthesized_doc_path` already exists, read it too, and treat it
+   as the base to update, not a draft to throw away.** Someone may have
+   hand-edited it since the last synthesize run -- added their own
+   sections, corrected something, reworded for clarity. Your job on a
+   re-run is to fold in what the log has recorded since, and fix anything
+   the log shows is now stale, while leaving sections the log hasn't
+   touched alone. Don't silently discard human edits just because you're
+   regenerating from the log; the log is a source of new information, not
+   the sole source of truth for content a person already refined.
+3. Organize by topic, not by date -- group related facts and decisions
+   together the way you'd explain the project to someone new, rather than
+   preserving the log's chronological order. It's fine, and often right,
+   to note *why* a decision was made if the log entries carry that
+   rationale, but don't invent rationale the log doesn't actually contain.
+4. Show the user the proposed doc (or, on a re-run, the diff against the
+   existing one) before writing anything. Wait for their go-ahead.
+5. Once approved, write it. Do not commit it yourself -- tell the user to
+   review with `git diff` and commit when they're happy.
+
+Like `condense`, this only runs when the user has asked for it -- never
+automatically, and never as a side effect of `status` or `diff`.
+
 ## Configuring
 
 There's no dedicated config script -- `.living-context/config.json` is a
@@ -114,7 +164,8 @@ plain JSON file the user (or you, on their behalf) can create or edit
 directly at the repo root. It's optional; living-context works with no
 config file at all, using the defaults `status` will show. The recognized
 keys are `doc_path`, `sub_doc_dir`, `archive_dir`, `threshold_lines`,
-`auto_commit`, and `model` -- see the plugin README for what each does. If
+`warn_ratio`, `synthesized_doc_path`, `auto_commit`, and `model` -- see the
+plugin README for what each does. If
 the user asks to change one, read the existing file if present (don't
 clobber other keys), edit or create it, and mention that new values take
 effect on the *next* hook run, not retroactively.

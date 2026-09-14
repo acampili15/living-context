@@ -4,6 +4,7 @@ the current repo: doc sizes vs. threshold, the last commit each doc was
 updated for, and what sub-docs/archive files exist. Read-only -- makes no
 changes.
 """
+import datetime
 import re
 import subprocess
 import sys
@@ -55,7 +56,8 @@ def main():
     print(f"config: {config_path}{'' if config_path.is_file() else ' (not present -- using defaults)'}")
     print(f"  doc_path={config['doc_path']}  sub_doc_dir={config['sub_doc_dir']}  "
           f"archive_dir={config['archive_dir']}  threshold_lines={threshold}  "
-          f"warn_ratio={warn_ratio}  auto_commit={config['auto_commit']}\n")
+          f"warn_ratio={warn_ratio}  synthesized_doc_path={config['synthesized_doc_path']}  "
+          f"auto_commit={config['auto_commit']}\n")
 
     print("main doc:")
     print(_doc_summary(repo_root / config["doc_path"], threshold, warn_ratio))
@@ -76,6 +78,17 @@ def main():
     for p in archive_files:
         entry_count = p.read_text().count("\n## ") + (1 if p.read_text().startswith("## ") else 0)
         print(f"  {p}: {entry_count} archived entries")
+
+    synth_path = repo_root / config["synthesized_doc_path"]
+    print(f"\nsynthesized doc ({synth_path}):")
+    if not synth_path.is_file():
+        print("  does not exist yet -- run the skill's `synthesize` action to build it from the log")
+    else:
+        synth_mtime = datetime.datetime.fromtimestamp(synth_path.stat().st_mtime)
+        print(f"  last written: {synth_mtime.isoformat(timespec='minutes')}")
+        main_doc = repo_root / config["doc_path"]
+        if main_doc.is_file() and main_doc.stat().st_mtime > synth_path.stat().st_mtime:
+            print("  the log has changed since -- consider re-running `synthesize` to catch it up")
 
     log_hint = "$CLAUDE_PLUGIN_DATA/context-update.log (or ~/.living-context/logs/ if that's unset)"
     print(f"\nHook run log: {log_hint}")

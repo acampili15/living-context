@@ -55,10 +55,13 @@ plugin, appending a dated entry after commits judged worth logging; entries
 are grounded only in each commit's own message/diff; a doc that grows past
 a size threshold gets its oldest entries mechanically archived (unchanged
 text, just moved) into an archive directory; and the `living-context` skill
-gives manual controls (`status`, `diff`, `condense`) for anyone who wants
-to inspect or reshape this doc themselves. Then a blank line, then your
-entry. This paragraph is written once, when the file is created -- never
-rewrite it on later runs.
+gives manual controls (`status`, `diff`, `condense`, `synthesize`) for
+anyone who wants to inspect, reshape, or reorganize this log themselves --
+`synthesize` in particular turns this chronological log into a separate,
+topic-organized reference doc, since "what changed, in order" and "how
+does this project actually work" are different documents. Then a blank
+line, then your entry. This paragraph is written once, when the file is
+created -- never rewrite it on later runs.
 
 ## Where to write
 

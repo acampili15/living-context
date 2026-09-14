@@ -20,9 +20,12 @@ chore someone has to remember to do.
   answers "wait, what wrote this?" on the spot.
 - A companion **skill** gives you manual controls: `status` (doc sizes,
   what the hook has been doing), `diff` (what's changed in the doc
-  itself, via ordinary git history), and `condense` (the one place
-  summarization/paraphrasing happens — always drafted for your review,
-  never auto-committed).
+  itself, via ordinary git history), `condense` (shorten the log itself —
+  fewer, denser dated entries, still chronological), and `synthesize`
+  (turn the log into a separate, topic-organized reference doc, e.g.
+  `PROJECT.md` — what this project is and how it works, not a changelog).
+  Both `condense` and `synthesize` always draft their result for your
+  review first and never auto-commit.
 
 ## Why archiving is automatic but condensing isn't
 
@@ -49,6 +52,35 @@ does it get written — and even then, the plugin doesn't commit it for you.
 If you take nothing else from this README: the hook never rewords
 anything you or a previous hook run already wrote. It only ever adds or
 relocates text unchanged.
+
+## The log vs. the doc: `condense` vs. `synthesize`
+
+`CONTEXT.md` is a *log*: dated entries, in order, one per commit judged
+worth recording. That's a great format for "what happened and when," and a
+bad format for "what is this project and how does it work" — answering the
+second question from a long changelog means scrolling and mentally
+reassembling scattered facts. `condense` and `synthesize` both shorten
+your reading burden, but in different ways:
+
+- `condense` keeps the log's shape. It makes old entries denser — fewer
+  words, same chronological structure — and writes the result back into
+  the log itself (or an archive file).
+- `synthesize` throws the chronological shape away on purpose. It reads
+  the whole log and produces a separate, topic-organized reference doc
+  (default `PROJECT.md`) — the kind of document a project's own
+  `CLAUDE.md` or `README.md` usually is: what this is, how it's
+  structured, key decisions and why, grouped by subject. It's built *from*
+  the log, but it isn't the log, and it isn't touched by the hook.
+
+Keeping `synthesize`'s output in a separate file (not a restructured
+`CONTEXT.md`) is deliberate: the log's core guarantee is that nothing in
+it is ever rewritten by automation, and a topic-organized doc necessarily
+needs its sections *updated* over time as the project changes underneath
+them — that's editing, not appending. Splitting them into two files means
+the log's append-only guarantee never needs an exception, and the
+synthesized doc can always be regenerated (or updated) from the log if it
+ever gets out of sync — see `synthesize` in the skill for how re-runs
+handle a doc you've since hand-edited.
 
 ## Why the warning is a banner in the doc, not a message from Claude
 
@@ -127,6 +159,7 @@ defaults:
 | `archive_dir` | `context/archive` | Where mechanically-archived entries land, one file per `YYYY-MM`. |
 | `threshold_lines` | `400` | Line count that triggers archiving an over-long doc after an append. |
 | `warn_ratio` | `0.85` | Fraction of `threshold_lines` at which the doc gets a visible warning banner suggesting `condense`, before the hard archiving threshold hits. |
+| `synthesized_doc_path` | `PROJECT.md` | Where the skill's `synthesize` action writes its topic-organized reference doc, built from the log. Never touched by the hook. |
 | `auto_commit` | `false` | If true, the hook commits its own doc/archive changes as a separate commit. **Off by default** — an automation that commits on your behalf should be something you opt into per repo, not a default that could surprise you. |
 | `model` | `null` | Model for the headless `claude -p` call; `null` uses the CLI's own default. |
 

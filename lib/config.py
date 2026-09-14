@@ -29,6 +29,13 @@ DEFAULTS = {
     # things before the mechanical (verbatim, not-shortened) archiving at
     # threshold_lines kicks in.
     "warn_ratio": 0.85,
+    # Where the skill's `synthesize` action writes its topic-organized
+    # reference doc, relative to repo root. Distinct from doc_path on
+    # purpose: doc_path is the append-only chronological log the hook
+    # writes unattended, and this is a separate, human-reviewed doc built
+    # *from* that log -- keeping them separate means the log's
+    # never-rewritten guarantee never has to carve out an exception for it.
+    "synthesized_doc_path": "PROJECT.md",
     # If true, the hook commits its own doc/archive changes as a separate
     # commit after updating them. Default false: changes are left in the
     # working tree for the user to review and commit on their own terms --
