@@ -46,9 +46,19 @@ one-liner is fine for a small one.>
 ```
 
 Append this block at the very end of the file, preceded by exactly one
-blank line. If the target file doesn't exist yet, create it with a one-line
-title (`# <repo name> — Context Log`) and one sentence describing what the
-file is, then a blank line, then your entry.
+blank line. If the target file doesn't exist yet, this is the first time
+living-context has run in this repo -- create it with a one-line title
+(`# <repo name> — Context Log`) followed by a short onboarding paragraph (2-4
+sentences) explaining, for whoever opens this file with no other context:
+this doc is maintained automatically by the living-context Claude Code
+plugin, appending a dated entry after commits judged worth logging; entries
+are grounded only in each commit's own message/diff; a doc that grows past
+a size threshold gets its oldest entries mechanically archived (unchanged
+text, just moved) into an archive directory; and the `living-context` skill
+gives manual controls (`status`, `diff`, `condense`) for anyone who wants
+to inspect or reshape this doc themselves. Then a blank line, then your
+entry. This paragraph is written once, when the file is created -- never
+rewrite it on later runs.
 
 ## Where to write
 
@@ -58,7 +68,10 @@ file is, then a blank line, then your entry.
   already has its own sub-doc, or clearly deserves a new one (a
   self-contained feature area the main doc doesn't already cover), write
   the entry there instead of the main doc. Name a new sub-doc after the
-  subtree/feature.
+  subtree/feature. If you're creating the sub-doc for the first time, its
+  title/intro can be one line (`# <feature> — Context Log` plus "see
+  `<main doc path>` for how this file works") -- no need to repeat the
+  full onboarding paragraph the main doc gets.
 - If you create a new sub-doc, also add one pointer line to it under a
   short "See also" list in the main doc -- by adding a line, never by
   rewriting the existing list from scratch.

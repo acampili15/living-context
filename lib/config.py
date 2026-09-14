@@ -23,6 +23,12 @@ DEFAULTS = {
     # When a doc (main or sub) exceeds this many lines after an append, the
     # hook mechanically moves its oldest entries into the archive.
     "threshold_lines": 400,
+    # Once a doc's line count reaches this fraction of threshold_lines, the
+    # hook writes a visible warning into the doc itself suggesting the user
+    # run the skill's `condense` action -- a chance to consciously shorten
+    # things before the mechanical (verbatim, not-shortened) archiving at
+    # threshold_lines kicks in.
+    "warn_ratio": 0.85,
     # If true, the hook commits its own doc/archive changes as a separate
     # commit after updating them. Default false: changes are left in the
     # working tree for the user to review and commit on their own terms --

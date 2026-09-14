@@ -18,40 +18,13 @@ the plugin README's "Why archiving is automatic but condensing isn't"
 section for the full rationale.
 """
 import json
-import re
 import sys
 from pathlib import Path
 
-ENTRY_HEADING_RE = re.compile(r"^## (\d{4}-\d{2})-\d{2}\b.*$", re.MULTILINE)
-POINTER_MARKER = "<!-- living-context:archive-pointer -->"
-# Matches the marker line, the following blockquote line, and one trailing
-# blank line, so re-inserting a freshly regenerated pointer never duplicates
-# a stale one left by a previous run.
-POINTER_BLOCK_RE = re.compile(
-    re.escape(POINTER_MARKER) + r"\n>.*\n\n?", re.MULTILINE
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from doc_format import (  # noqa: E402
+    split_entries, strip_known_blocks, content_line_count, rebuild_doc, POINTER_MARKER,
 )
-
-
-def _split_entries(text: str):
-    """Split doc text into (preamble, [(year_month, entry_text), ...]).
-
-    entry_text includes its own "## ..." heading line through (but not
-    including) the next entry's heading, verbatim -- exactly the bytes that
-    will later be pasted into an archive file if this entry gets evicted.
-    """
-    matches = list(ENTRY_HEADING_RE.finditer(text))
-    if not matches:
-        return text, []
-    preamble = text[: matches[0].start()]
-    entries = []
-    for i, m in enumerate(matches):
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-        entries.append((m.group(1), text[m.start():end]))
-    return preamble, entries
-
-
-def _strip_pointer(preamble: str) -> str:
-    return POINTER_BLOCK_RE.sub("", preamble)
 
 
 def archive_if_needed(doc_path: Path, archive_dir: Path, threshold_lines: int) -> dict:
@@ -68,16 +41,21 @@ def archive_if_needed(doc_path: Path, archive_dir: Path, threshold_lines: int) -
         return result
 
     text = doc_path.read_text()
-    if text.count("\n") + 1 <= threshold_lines:
+    if content_line_count(text) <= threshold_lines:
         result["skipped_reason"] = "under threshold"
         return result
 
-    preamble, entries = _split_entries(text)
+    preamble, entries = split_entries(text)
     if len(entries) <= 1:
         result["skipped_reason"] = "not enough entries to archive (keeping the most recent one in place)"
         return result
 
-    preamble = _strip_pointer(preamble)
+    # Drop any instrumentation blocks (pointer, warning banner) from the
+    # preamble before rebuilding -- the pointer gets regenerated fresh
+    # below from archive_dir's actual contents, and any warning banner is
+    # left for the (separate, LLM-free) warn.py pass to recompute after
+    # this archiving run, rather than carried forward stale.
+    clean_preamble = strip_known_blocks(preamble)
 
     # Evict oldest entries (front of the list, since the format is
     # append-only-at-the-end / oldest-first) until we're back under
@@ -85,7 +63,7 @@ def archive_if_needed(doc_path: Path, archive_dir: Path, threshold_lines: int) -
     evicted = []
     remaining = list(entries)
     while len(remaining) > 1:
-        projected_lines = len(preamble.splitlines()) + sum(
+        projected_lines = len(clean_preamble.splitlines()) + sum(
             e.count("\n") + 1 for _, e in remaining
         )
         if projected_lines <= threshold_lines:
@@ -127,8 +105,7 @@ def archive_if_needed(doc_path: Path, archive_dir: Path, threshold_lines: int) -
         refs = ", ".join(f"`{archive_dir}/{name}`" for name in archive_files)
         pointer = f"{POINTER_MARKER}\n> Older entries archived to: {refs}\n\n"
 
-    new_text = preamble.rstrip("\n") + "\n\n" + pointer + "".join(e for _, e in remaining)
-    doc_path.write_text(new_text)
+    doc_path.write_text(rebuild_doc(clean_preamble, [pointer], remaining))
 
     result["archived_entries"] = len(evicted)
     return result

@@ -44,6 +44,12 @@ This is read-only. It reports: the effective config (defaults or
 threshold and the commit SHA its last entry references, the same for any
 sub-docs, and a list of archive files with how many entries each holds.
 
+A doc flagged "APPROACHING THRESHOLD" already carries a visible warning
+banner (written by the hook itself, at the top of the doc) suggesting
+`condense` -- that's the cue this action exists for. If the user asks
+about it, offer to run `condense` for them rather than waiting for them to
+ask a second time.
+
 If a doc shows "OVER THRESHOLD", that means it's *waiting* on the next hook
 run to be archived -- the hook only archives as a side effect of appending
 a new entry, so an over-threshold doc with no recent commits will sit that

@@ -11,7 +11,13 @@ chore someone has to remember to do.
   never invented.
 - When a doc grows past a size threshold, the hook **mechanically
   archives** its oldest entries — verbatim, no rewriting — into
-  `context/archive/<YYYY-MM>.md`.
+  `context/archive/<YYYY-MM>.md`. Before that happens, once the doc
+  crosses a lower `warn_ratio` of that threshold, it gets a visible
+  **warning banner** suggesting you run `condense` yourself instead.
+- The first time it runs in a repo, the hook writes a short **onboarding
+  paragraph** into the newly-created doc explaining what living-context
+  is and how it works — so opening `CONTEXT.md` for the first time
+  answers "wait, what wrote this?" on the spot.
 - A companion **skill** gives you manual controls: `status` (doc sizes,
   what the hook has been doing), `diff` (what's changed in the doc
   itself, via ordinary git history), and `condense` (the one place
@@ -43,6 +49,29 @@ does it get written — and even then, the plugin doesn't commit it for you.
 If you take nothing else from this README: the hook never rewords
 anything you or a previous hook run already wrote. It only ever adds or
 relocates text unchanged.
+
+## Why the warning is a banner in the doc, not a message from Claude
+
+It would be nicer if, right after a commit, Claude just told you in that
+same session "hey, CONTEXT.md is getting long, want me to condense it?"
+instead of you having to notice a banner in a file. That was tried and
+deliberately not shipped.
+
+Claude Code hooks can attach a `systemMessage`/`additionalContext` to what
+Claude sees next. In testing: phrased as neutral information ("CONTEXT.md
+is at 39/40 lines"), it was silently absorbed and never mentioned — not a
+reliable nudge. Phrased as an instruction ("tell the user to run
+condense"), Claude *did* notice it, but correctly flagged it as a likely
+prompt injection and declined to act on it, rather than relaying it. That
+second behavior is Claude Code working as intended — a background hook
+script shouldn't be able to freely put words in Claude's mouth, and trying
+to phrase around that would mean working against a real security boundary,
+not a bug to route around. So there's no reliable "Claude proactively
+mentions this" channel available here, and this plugin doesn't try to
+manufacture one. The banner living-context writes directly into the doc is
+guaranteed-visible instead: you'll see it the moment you open the file,
+with no dependency on how any particular session happens to react to hook
+output.
 
 ## Requirements
 
@@ -97,6 +126,7 @@ defaults:
 | `sub_doc_dir` | `context` | Where sub-feature docs live/get created. |
 | `archive_dir` | `context/archive` | Where mechanically-archived entries land, one file per `YYYY-MM`. |
 | `threshold_lines` | `400` | Line count that triggers archiving an over-long doc after an append. |
+| `warn_ratio` | `0.85` | Fraction of `threshold_lines` at which the doc gets a visible warning banner suggesting `condense`, before the hard archiving threshold hits. |
 | `auto_commit` | `false` | If true, the hook commits its own doc/archive changes as a separate commit. **Off by default** — an automation that commits on your behalf should be something you opt into per repo, not a default that could surprise you. |
 | `model` | `null` | Model for the headless `claude -p` call; `null` uses the CLI's own default. |
 
@@ -123,8 +153,12 @@ The `living-context` skill's `status` action shows the effective config
    it. Give it a few seconds to a minute or two in the background
    (it's making a real `claude -p` call).
 4. Check `CONTEXT.md` — a new dated entry should appear, referencing your
-   commit's short SHA.
-5. If nothing appears, check the hook's log: `$CLAUDE_PLUGIN_DATA/context-update.log`,
+   commit's short SHA. If this was the repo's first commit through
+   living-context, you should also see the onboarding paragraph above it.
+5. To see the warning banner without waiting for a real 400-line doc, set
+   a low `threshold_lines`/`warn_ratio` in `.living-context/config.json`
+   (e.g. `{"threshold_lines": 10, "warn_ratio": 0.5}`) before committing.
+6. If nothing appears, check the hook's log: `$CLAUDE_PLUGIN_DATA/context-update.log`,
    or `~/.living-context/logs/context-update.log` if `CLAUDE_PLUGIN_DATA`
    isn't set in your environment. It records why a run was skipped (commit
    judged not worth logging, `claude` not found, a timeout, etc.) —
@@ -144,7 +178,9 @@ living-context/
 │                                     then runs the mechanical archive check.
 ├── lib/
 │   ├── config.py                  — shared defaults + .living-context/config.json loading
+│   ├── doc_format.py              — shared entry-parsing + sentinel-block helpers
 │   ├── archive.py                 — the mechanical, LLM-free archiving logic
+│   ├── warn.py                    — the mechanical, LLM-free size-warning banner
 │   └── prompts/system_prompt.md   — the rules given to the headless append step
 └── skills/living-context/
     ├── SKILL.md                   — manual status/diff/condense/configure controls

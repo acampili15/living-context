@@ -6,8 +6,9 @@ Flow: gather this commit's message + diff -> ask a headless `claude -p` call
 (scoped to Read/Write/Edit/Glob only, no Bash, no network) to append a
 grounded entry to the right doc, per lib/prompts/system_prompt.md's rules
 -> mechanically archive any doc that's now over its line threshold (pure
-Python, no LLM -- see lib/archive.py) -> optionally auto-commit, if the repo
-opted into that.
+Python, no LLM -- see lib/archive.py) -> check any doc still near threshold
+and add/clear a size-warning banner (lib/warn.py, also LLM-free) ->
+optionally auto-commit, if the repo opted into that.
 
 Everything here is best-effort: a failure partway through (claude binary
 missing, a timeout, a git error) should just stop and log, never raise
@@ -28,6 +29,7 @@ sys.path.insert(0, str(PLUGIN_ROOT / "lib"))
 
 from config import load_config  # noqa: E402
 from archive import archive_if_needed  # noqa: E402
+from warn import check_and_warn  # noqa: E402
 
 MAX_DIFF_CHARS = 20_000
 CLAUDE_TIMEOUT_SECONDS = 180
@@ -146,6 +148,18 @@ def main():
                     f"archived {result['archived_entries']} entries from {target} "
                     f"into {result['archive_files_touched']}",
                 )
+
+        # Near-threshold warning pass -- runs after archiving, so it only
+        # ever sees a doc archiving has already brought under threshold if
+        # that was possible. Purely a nudge toward a manual `condense`; it
+        # never touches entry text, only its own banner line.
+        warn_ratio = float(config.get("warn_ratio", 0.85))
+        for target in archive_targets:
+            warn_result = check_and_warn(target, threshold, warn_ratio)
+            if warn_result["warned"] or warn_result["warning_cleared"]:
+                if str(target) not in touched_files:
+                    touched_files.append(str(target))
+                _log(log_file, f"warn check on {target}: {warn_result}")
 
         if config.get("auto_commit") and touched_files:
             try:

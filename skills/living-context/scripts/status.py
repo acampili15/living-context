@@ -13,6 +13,7 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PLUGIN_ROOT / "lib"))
 
 from config import load_config, CONFIG_RELATIVE_PATH  # noqa: E402
+from doc_format import content_line_count, WARN_MARKER  # noqa: E402
 
 LAST_SHA_RE = re.compile(r"commit `([0-9a-f]{7,40})`")
 
@@ -27,15 +28,20 @@ def _repo_root() -> Path:
     return Path(out.stdout.strip())
 
 
-def _doc_summary(path: Path, threshold: int) -> str:
+def _doc_summary(path: Path, threshold: int, warn_ratio: float) -> str:
     if not path.is_file():
         return f"  {path}: does not exist yet (will be created on the next logged commit)"
     text = path.read_text()
-    line_count = text.count("\n") + 1
+    line_count = content_line_count(text)
     matches = LAST_SHA_RE.findall(text)
     last_sha = matches[-1] if matches else "none found"
-    over = " (OVER THRESHOLD -- will be archived on next hook run)" if line_count > threshold else ""
-    return f"  {path}: {line_count} lines / {threshold} threshold{over}, last entry commit `{last_sha}`"
+    if line_count > threshold:
+        flag = " (OVER THRESHOLD -- will be archived on next hook run)"
+    elif WARN_MARKER in text:
+        flag = f" (APPROACHING THRESHOLD -- over {warn_ratio:.0%}, consider running `condense`)"
+    else:
+        flag = ""
+    return f"  {path}: {line_count} lines / {threshold} threshold{flag}, last entry commit `{last_sha}`"
 
 
 def main():
@@ -43,15 +49,16 @@ def main():
     config = load_config(repo_root)
     config_path = repo_root / CONFIG_RELATIVE_PATH
     threshold = int(config["threshold_lines"])
+    warn_ratio = float(config.get("warn_ratio", 0.85))
 
     print(f"living-context status for {repo_root}\n")
     print(f"config: {config_path}{'' if config_path.is_file() else ' (not present -- using defaults)'}")
     print(f"  doc_path={config['doc_path']}  sub_doc_dir={config['sub_doc_dir']}  "
           f"archive_dir={config['archive_dir']}  threshold_lines={threshold}  "
-          f"auto_commit={config['auto_commit']}\n")
+          f"warn_ratio={warn_ratio}  auto_commit={config['auto_commit']}\n")
 
     print("main doc:")
-    print(_doc_summary(repo_root / config["doc_path"], threshold))
+    print(_doc_summary(repo_root / config["doc_path"], threshold, warn_ratio))
 
     sub_doc_dir = repo_root / config["sub_doc_dir"]
     sub_docs = sorted(p for p in sub_doc_dir.glob("*.md")) if sub_doc_dir.is_dir() else []
@@ -59,7 +66,7 @@ def main():
     if not sub_docs:
         print("  none")
     for p in sub_docs:
-        print(_doc_summary(p, threshold))
+        print(_doc_summary(p, threshold, warn_ratio))
 
     archive_dir = repo_root / config["archive_dir"]
     archive_files = sorted(archive_dir.glob("*.md")) if archive_dir.is_dir() else []
