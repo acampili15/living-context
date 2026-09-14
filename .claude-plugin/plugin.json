@@ -1,0 +1,10 @@
+{
+  "name": "living-context",
+  "displayName": "Living Context",
+  "version": "0.1.0",
+  "description": "Maintains an auto-updating CONTEXT.md for a repo: a commit-triggered background hook appends grounded, dated entries and mechanically archives old ones once the doc grows past a size threshold. A companion skill gives manual diff/status/condense controls, including the one place summarization/paraphrasing is allowed — always with human review before it's committed.",
+  "author": {
+    "name": "living-context contributors"
+  },
+  "license": "MIT"
+}
