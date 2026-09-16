@@ -130,6 +130,32 @@ def main():
         if proc.stdout.strip():
             _log(log_file, f"stdout: {proc.stdout.strip()[-2000:]}")
 
+        touched_files = []
+
+        def _mark_touched(path) -> None:
+            key = str(path)
+            if key not in touched_files:
+                touched_files.append(key)
+
+        # The claude -p step above is only supposed to touch doc_path and
+        # files under sub_doc_dir (its system prompt says so, though that's
+        # not filesystem-enforced) -- ask git what actually changed under
+        # those two paths so an ordinary append gets counted as "touched"
+        # too, not just archiving/warning changes. Without this, auto_commit
+        # below would never fire for a plain append that doesn't also cross
+        # the archive/warn thresholds in the same run.
+        try:
+            status_output = _git(
+                repo_root, "status", "--porcelain", "--",
+                config["doc_path"], config["sub_doc_dir"],
+            )
+            for line in status_output.splitlines():
+                rel_path = line[3:].strip()
+                if rel_path:
+                    _mark_touched(Path(repo_root) / rel_path.split(" -> ")[-1])
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            _log(log_file, f"could not check what claude -p changed: {e}")
+
         # Mechanical archiving pass -- no LLM involved from here on. Check
         # the main doc plus every sub-doc that exists, since any of them
         # could have just been appended to (or could have grown past
@@ -138,11 +164,10 @@ def main():
         if sub_doc_dir.is_dir():
             archive_targets += sorted(sub_doc_dir.glob("*.md"))
 
-        touched_files = []
         for target in archive_targets:
             result = archive_if_needed(target, archive_dir, threshold)
             if result["archived_entries"]:
-                touched_files.append(str(target))
+                _mark_touched(target)
                 _log(
                     log_file,
                     f"archived {result['archived_entries']} entries from {target} "
@@ -157,13 +182,19 @@ def main():
         for target in archive_targets:
             warn_result = check_and_warn(target, threshold, warn_ratio)
             if warn_result["warned"] or warn_result["warning_cleared"]:
-                if str(target) not in touched_files:
-                    touched_files.append(str(target))
+                _mark_touched(target)
                 _log(log_file, f"warn check on {target}: {warn_result}")
 
         if config.get("auto_commit") and touched_files:
             try:
-                _git(repo_root, "add", *touched_files, str(archive_dir))
+                add_args = list(touched_files)
+                # Only stage archive_dir if archiving actually created it --
+                # `git add` errors on a pathspec that doesn't exist on disk,
+                # which would otherwise abort the whole commit on a run
+                # where only the warn banner (not archiving) fired.
+                if archive_dir.is_dir():
+                    add_args.append(str(archive_dir))
+                _git(repo_root, "add", *add_args)
                 _git(
                     repo_root, "commit", "-m",
                     f"context: update after {short_sha}",

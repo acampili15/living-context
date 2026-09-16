@@ -17,9 +17,12 @@ import sys
 from pathlib import Path
 
 # Matches `git commit` as an actual subcommand invocation (optionally after
-# `&&`/`;`/`|`, optionally with flags like `-C <path>` before `commit`), not
-# just the substring "git commit" appearing inside unrelated text.
-GIT_COMMIT_RE = re.compile(r"(?:^|[;&|]\s*)git\s+(?:-\S+(?:\s+\S+)?\s+)*commit\b")
+# `&&`/`;`/`|`, with optional leading whitespace, and optionally with flags
+# like `-C <path>` before `commit`), not just the substring "git commit"
+# appearing inside unrelated text. `commit` must be followed by whitespace
+# or end-of-string (not just a word boundary) so a hyphenated lookalike
+# subcommand name like `commit-msg-hook.sh` doesn't false-positive.
+GIT_COMMIT_RE = re.compile(r"(?:^\s*|[;&|]\s*)git\s+(?:-\S+(?:\s+\S+)?\s+)*commit(?:\s|$)")
 
 
 def _should_process(data: dict) -> bool:

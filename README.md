@@ -214,25 +214,26 @@ to test the actual LLM drafting behavior — that's inherently not something
 a unit test can assert on; verify it manually per "Verifying it's working"
 above.
 
-A couple of genuine behavior gaps surfaced while writing these tests, and
-are captured as tests documenting current behavior rather than silently
-"fixed" (see their docstrings/comments for detail, in `tests/test_run_context_update.py`
-and `tests/test_hook_filter.py`):
+Three genuine behavior gaps surfaced while writing this suite and have
+since been fixed (with regression tests added in
+`tests/test_run_context_update.py` and `tests/test_hook_filter.py`):
 
-- `auto_commit` only stages/commits files that the archiving or warning
-  passes report as touched — an ordinary commit that appends an entry
-  without pushing a doc across the warn/threshold lines is never
-  auto-committed, despite the README describing `auto_commit` as
-  committing "its own doc/archive changes" generally.
-- When only the warning pass (not archiving) touches a doc, `archive_dir`
-  hasn't been created on disk yet, but the auto-commit `git add` call
-  includes it unconditionally — the `git add` fails on that nonexistent
-  pathspec and the whole commit attempt is aborted.
+- `auto_commit` used to only stage/commit files that the archiving or
+  warning passes reported as touched, so an ordinary commit that appends
+  an entry without also pushing a doc across the warn/threshold lines was
+  never auto-committed. The worker now also checks `git status` on
+  `doc_path`/`sub_doc_dir` right after the `claude -p` step, so a plain
+  append is counted as "touched" too.
+- When only the warning pass (not archiving) touched a doc, `archive_dir`
+  might not exist on disk yet, but the auto-commit `git add` call included
+  it unconditionally, so the add failed on that nonexistent pathspec and
+  aborted the whole commit. `archive_dir` is now only staged when it
+  actually exists.
 - `GIT_COMMIT_RE` (the fast filter that decides whether a `Bash` call gets
-  treated as `git commit`) has two minor sharp edges: a command that
-  merely *starts with* `git commit-<suffix>` (not a real `commit`
-  invocation) is a false positive, and leading whitespace before `git`
-  causes a false negative.
+  treated as `git commit`) had two minor sharp edges: a command that
+  merely *started with* `git commit-<suffix>` (not a real `commit`
+  invocation) was a false positive, and leading whitespace before `git`
+  caused a false negative. Both are fixed.
 
 ## How the pieces fit together
 

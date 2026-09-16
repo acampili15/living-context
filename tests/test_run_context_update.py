@@ -190,11 +190,10 @@ def test_worker_archives_over_threshold_doc_after_append(git_repo, tmp_path):
 
 
 def test_worker_auto_commit_commits_when_archiving_touched_a_doc(git_repo, tmp_path):
-    # auto_commit's own logic only stages files that archive_if_needed/
-    # check_and_warn report as touched -- so this test deliberately forces
-    # actual archiving (low threshold_lines, a pre-existing old entry) to
-    # exercise the path where it works. See the two tests below for cases
-    # where auto_commit currently does *not* end up committing anything.
+    # touched_files is populated from what claude -p changed, plus whatever
+    # archive_if_needed/check_and_warn additionally touch -- this exercises
+    # the archiving-triggered path specifically (low threshold_lines, a
+    # pre-existing old entry to evict).
     config_dir = git_repo / ".living-context"
     config_dir.mkdir()
     (config_dir / "config.json").write_text(
@@ -228,16 +227,11 @@ def test_worker_auto_commit_commits_when_archiving_touched_a_doc(git_repo, tmp_p
     assert "CONTEXT.md" not in status  # the doc's own changes got committed
 
 
-def test_worker_auto_commit_fails_when_only_warn_banner_touched_a_doc(git_repo, tmp_path):
-    # Known gap: when only the warn pass (not archiving) reports a touched
-    # doc, `archive_dir` was never created on disk -- but the auto_commit
-    # `git add` call always includes it unconditionally, so `git add
-    # <doc> <archive_dir>` fails on the nonexistent archive_dir pathspec
-    # and the whole commit attempt aborts (logged as "commit failed"),
-    # leaving the appended entry uncommitted despite auto_commit being
-    # enabled. Documented here rather than silently "fixed", since changing
-    # that logic is outside the scope of adding test coverage -- flag it to
-    # the user instead.
+def test_worker_auto_commit_succeeds_when_only_warn_banner_touched_a_doc(git_repo, tmp_path):
+    # Regression test: when only the warn pass (not archiving) touches a
+    # doc, archive_dir may never have been created on disk. auto_commit's
+    # `git add` must not unconditionally include it in that case, or the
+    # add fails on the nonexistent pathspec and aborts the whole commit.
     config_dir = git_repo / ".living-context"
     config_dir.mkdir()
     (config_dir / "config.json").write_text(
@@ -248,6 +242,7 @@ def test_worker_auto_commit_fails_when_only_warn_banner_touched_a_doc(git_repo, 
     bin_dir = tmp_path / "bin"
     _install_fake_claude(bin_dir)
     log_dir = tmp_path / "logs"
+    assert not (git_repo / "context" / "archive").exists()
 
     before = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=git_repo, capture_output=True, text=True, check=True,
@@ -259,25 +254,22 @@ def test_worker_auto_commit_fails_when_only_warn_banner_touched_a_doc(git_repo, 
     after = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=git_repo, capture_output=True, text=True, check=True,
     ).stdout.strip()
-    assert after == before  # commit attempt failed
+    assert after != before
     log_text = _log_text(log_dir)
-    assert "auto_commit enabled but commit failed" in log_text
+    assert "auto-committed context update" in log_text
+    assert "commit failed" not in log_text
     status = subprocess.run(
         ["git", "status", "--porcelain"], cwd=git_repo, capture_output=True, text=True, check=True,
     ).stdout
-    assert "CONTEXT.md" in status  # left uncommitted despite auto_commit
+    assert "CONTEXT.md" not in status
 
 
-def test_worker_auto_commit_does_not_commit_plain_append(git_repo, tmp_path):
-    # Known gap: touched_files (what auto_commit stages/commits) is only
-    # ever populated by the archiving and warn passes -- never by doc_path
-    # itself just having received a fresh entry from `claude -p`. So on an
-    # ordinary commit that doesn't push any doc across the warn/threshold
-    # lines, auto_commit currently does nothing and the freshly-appended
-    # entry is left uncommitted, contrary to what the README describes
-    # ("the hook commits its own doc/archive changes"). Documented here
-    # rather than silently "fixed", since changing that logic is outside
-    # the scope of adding test coverage -- flag it to the user instead.
+def test_worker_auto_commit_commits_a_plain_append(git_repo, tmp_path):
+    # Regression test: touched_files must include doc_path itself once
+    # claude -p appends to it, even when the append doesn't also cross the
+    # archive/warn thresholds in the same run -- otherwise auto_commit never
+    # fires on an ordinary commit, contrary to what the README describes
+    # ("the hook commits its own doc/archive changes").
     config_dir = git_repo / ".living-context"
     config_dir.mkdir()
     (config_dir / "config.json").write_text(json.dumps({"auto_commit": True}))
@@ -297,11 +289,17 @@ def test_worker_auto_commit_does_not_commit_plain_append(git_repo, tmp_path):
     after = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=git_repo, capture_output=True, text=True, check=True,
     ).stdout.strip()
-    assert after == before  # no auto-commit happened
+    assert after != before  # auto-commit happened
+    log_text = _log_text(log_dir)
+    assert "auto-committed context update" in log_text
     status = subprocess.run(
         ["git", "status", "--porcelain"], cwd=git_repo, capture_output=True, text=True, check=True,
     ).stdout
-    assert "CONTEXT.md" in status  # the appended entry is left uncommitted
+    assert "CONTEXT.md" not in status  # the appended entry got committed
+    show = subprocess.run(
+        ["git", "show", "--stat", "HEAD"], cwd=git_repo, capture_output=True, text=True, check=True,
+    ).stdout
+    assert "CONTEXT.md" in show
 
 
 def test_worker_no_commit_left_dirty_when_auto_commit_disabled(git_repo, tmp_path):
